@@ -1,8 +1,16 @@
 body {
   font-family: Arial;
   text-align: center;
+  position: relative;
 }
 canvas {
   border: 1px solid black;
   cursor: crosshair;
+  position: relative;
+}
+
+.arrow_label {
+  position: absolute;
+  width: 60px;
+  padding: 5px 8px;
 }
