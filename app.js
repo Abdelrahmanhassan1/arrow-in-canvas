@@ -2,8 +2,51 @@ const canvas = document.getElementById("arrowCanvas");
 const ctx = canvas.getContext("2d");
 const shapeSelect = document.getElementById("shape-select");
 const colorPicker = document.getElementById("arrow-color");
+const slider = document.getElementById("image-slider");
 
-let arrows = [];
+const imagePaths = [
+  "/images/image 1.png",
+  "/images/image 2.png",
+  "/images/image 3.png",
+  "/images/image 4.png",
+];
+
+const images = [];
+
+let currentImageIndex = 0;
+
+let loadedCount = 0;
+
+imagePaths.forEach((src, index) => {
+  const img = new Image();
+  img.src = src;
+  img.onload = () => {
+    loadedCount++;
+    if (loadedCount === imagePaths.length) {
+      drawImage(0);
+    }
+  };
+  images.push(img);
+});
+
+function drawImage(index) {
+  currentImageIndex = index;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const img = images[index];
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+}
+
+// Slider change event
+slider.addEventListener("input", (e) => {
+  const value = parseInt(e.target.value, 10);
+  if (images[value - 1]) {
+    drawImage(value - 1);
+  }
+});
+
+let visibleLabeledArrows = [];
+
+const arrowsPerImage = new Map();
 // a drag point whether head, tail
 let draggingPoint = null;
 // a drag for the whole body
@@ -13,12 +56,6 @@ let selectedArrow = null;
 const hitRadius = 10;
 let mouseDownPos = null;
 const moveThreshold = 5;
-
-let img = new Image();
-img.src = "/image.png";
-img.onload = () => {
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-};
 
 class Arrow {
   constructor(x1, y1, x2, y2, color = "blue") {
@@ -69,6 +106,13 @@ class Arrow {
   }
 }
 
+function getCurrentArrows() {
+  if (!arrowsPerImage.has(currentImageIndex)) {
+    arrowsPerImage.set(currentImageIndex, []);
+  }
+  return arrowsPerImage.get(currentImageIndex);
+}
+
 function drawControlPoint(ctx, x, y) {
   ctx.beginPath();
   ctx.arc(x, y, 3, 0, Math.PI * 2);
@@ -106,6 +150,7 @@ canvas.addEventListener("click", (e) => {
 
   if (mouseDownPos && distance(mouseDownPos, pos) > moveThreshold) return;
 
+  const arrows = getCurrentArrows();
   for (let arrow of arrows) {
     if (
       arrow.isNear(pos, arrow.head) ||
@@ -123,13 +168,14 @@ canvas.addEventListener("click", (e) => {
     arrow = new LabeledArrow(pos.x - 100, pos.y, pos.x, pos.y, color);
   }
 
-  arrows.push(arrow);
+  getCurrentArrows().push(arrow);
   redraw();
 });
 
 canvas.addEventListener("mousedown", (e) => {
   const pos = getMousePos(e);
 
+  const arrows = getCurrentArrows();
   for (let arrow of arrows) {
     if (arrow.isNear(pos, arrow.head)) {
       draggingPoint = "head";
@@ -195,9 +241,9 @@ function getMousePos(e) {
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(images[currentImageIndex], 0, 0, canvas.width, canvas.height);
 
-  for (let arrow of arrows) {
+  for (let arrow of getCurrentArrows()) {
     arrow.draw(ctx);
   }
 }
@@ -206,6 +252,7 @@ canvas.addEventListener("contextmenu", (e) => {
   e.preventDefault();
   const pos = getMousePos(e);
 
+  const arrows = getCurrentArrows();
   for (let i = 0; i < arrows.length; i++) {
     const arrow = arrows[i];
     if (
@@ -235,10 +282,22 @@ class LabeledArrow extends Arrow {
     input.className = " arrow_label";
     input.type = "text";
     input.placeholder = "Enter text";
+    input.style.display = "block";
 
     document.body.appendChild(input);
 
     return input;
+  }
+
+  hide() {
+    if (this.input) this.input.style.display = "none";
+  }
+
+  show() {
+    if (this.input) {
+      this.input.style.display = "block";
+      this.updateInputPosition(); // ← fix is here
+    }
   }
 
   updateInputPosition() {
@@ -255,6 +314,23 @@ class LabeledArrow extends Arrow {
   destroy() {
     if (this.input) {
       this.input.remove();
+    }
+  }
+}
+
+function drawImage(index) {
+  for (let arrow of visibleLabeledArrows) {
+    arrow.hide();
+  }
+  visibleLabeledArrows = [];
+
+  currentImageIndex = index;
+  redraw();
+
+  for (let arrow of getCurrentArrows()) {
+    if (arrow instanceof LabeledArrow) {
+      arrow.show(); // will now auto-position
+      visibleLabeledArrows.push(arrow);
     }
   }
 }
