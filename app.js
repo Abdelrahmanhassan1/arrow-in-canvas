@@ -68,12 +68,13 @@ class Arrow {
     const { x: x1, y: y1 } = this.tail;
     const { x: x2, y: y2 } = this.head;
 
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
+    this.path = new Path2D();
+    this.path.moveTo(x1, y1);
+    this.path.lineTo(x2, y2);
+
     ctx.strokeStyle = this.color;
     ctx.lineWidth = 3;
-    ctx.stroke();
+    ctx.stroke(this.path);
 
     drawArrowhead(ctx, x1, y1, x2, y2, this.color);
 
@@ -87,22 +88,81 @@ class Arrow {
     return Math.sqrt(dx * dx + dy * dy) < hitRadius;
   }
 
-  isOnLine(point) {
-    const { x: x1, y: y1 } = this.tail;
-    const { x: x2, y: y2 } = this.head;
-    const { x, y } = point;
+  isOnLine(ctx, point) {
+    if (!this.path) return false;
+    ctx.lineWidth = 6;
+    return ctx.isPointInStroke(this.path, point.x, point.y);
+  }
+}
 
-    const distanceToLine =
-      Math.abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1) /
-      Math.sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2);
+class LabeledArrow extends Arrow {
+  constructor(x1, y1, x2, y2, color) {
+    super(x1, y1, x2, y2, color);
+    this.label = "";
+    this.input = this.createInput(x1, y1);
+  }
 
-    // Also check that the point lies between head and tail
-    const dotProduct = (x - x1) * (x2 - x1) + (y - y1) * (y2 - y1);
-    const lengthSquared = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+  createInput(x, y) {
+    const input = document.createElement("input");
+    input.className = "arrow_label";
+    input.type = "text";
+    input.placeholder = "Enter text";
+    input.style.position = "absolute";
+    input.style.left = `${canvas.offsetLeft + x + 10}px`;
+    input.style.top = `${canvas.offsetTop + y - 20}px`;
+    input.maxLength = 64;
+    input.style.display = "block";
+    input.style.zIndex = 10;
+    input.style.font = "14px Arial";
 
-    const isBetween = dotProduct >= 0 && dotProduct <= lengthSquared;
+    input.addEventListener("blur", () => {
+      this.label = input.value;
+      input.remove();
+      this.input = null;
+      redraw();
+    });
 
-    return distanceToLine < 6 && isBetween;
+    document.body.appendChild(input);
+    return input;
+  }
+
+  hide() {
+    if (this.input) this.input.style.display = "none";
+  }
+
+  show() {
+    if (this.input) {
+      this.input.style.display = "block";
+      this.updateInputPosition(); // ← fix is here
+    }
+  }
+
+  updateInputPosition() {
+    if (!this.input) return;
+    const { x, y } = this.tail;
+    this.input.style.left = `${canvas.offsetLeft + x + 10}px`;
+    this.input.style.top = `${canvas.offsetTop + y - 20}px`;
+  }
+
+  draw(ctx) {
+    super.draw(ctx);
+
+    if (this.label) {
+      const { x, y } = this.tail;
+
+      ctx.font = "14px Arial";
+      ctx.fillStyle = this.color;
+
+      ctx.fillText(this.label, x + 10, y - 10);
+    } else {
+      this.updateInputPosition();
+    }
+  }
+
+  destroy() {
+    if (this.input) {
+      this.input.remove();
+    }
   }
 }
 
@@ -115,7 +175,7 @@ function getCurrentArrows() {
 
 function drawControlPoint(ctx, x, y) {
   ctx.beginPath();
-  ctx.arc(x, y, 3, 0, Math.PI * 2);
+  ctx.arc(x, y, 2, 0, Math.PI * 2);
   ctx.fillStyle = "red";
   ctx.fill();
 }
@@ -141,6 +201,41 @@ function drawArrowhead(ctx, fromx, fromy, tox, toy, color = "blue") {
   ctx.fill();
 }
 
+function getMousePos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top,
+  };
+}
+
+function drawImage(index) {
+  for (let arrow of visibleLabeledArrows) {
+    arrow.hide();
+  }
+  visibleLabeledArrows = [];
+
+  currentImageIndex = index;
+  redraw();
+
+  for (let arrow of getCurrentArrows()) {
+    if (arrow instanceof LabeledArrow) {
+      arrow.show();
+      visibleLabeledArrows.push(arrow);
+    }
+  }
+}
+
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.drawImage(images[currentImageIndex], 0, 0, canvas.width, canvas.height);
+
+  for (let arrow of getCurrentArrows()) {
+    arrow.draw(ctx);
+  }
+}
+
 canvas.addEventListener("click", (e) => {
   if (shapeSelect.value === "") return;
 
@@ -155,17 +250,21 @@ canvas.addEventListener("click", (e) => {
     if (
       arrow.isNear(pos, arrow.head) ||
       arrow.isNear(pos, arrow.tail) ||
-      arrow.isOnLine(pos)
+      arrow.isOnLine(ctx, pos)
     ) {
       return;
     }
   }
 
   let arrow;
+  const offset = 100 / Math.sqrt(2);
+  const tailX = pos.x - offset;
+  const tailY = pos.y - offset;
+
   if (shape === "arrow") {
-    arrow = new Arrow(pos.x - 100, pos.y, pos.x, pos.y, color);
+    arrow = new Arrow(tailX, tailY, pos.x, pos.y, color);
   } else if (shape === "arrow_text") {
-    arrow = new LabeledArrow(pos.x - 100, pos.y, pos.x, pos.y, color);
+    arrow = new LabeledArrow(tailX, tailY, pos.x, pos.y, color);
   }
 
   getCurrentArrows().push(arrow);
@@ -185,7 +284,7 @@ canvas.addEventListener("mousedown", (e) => {
       draggingPoint = "tail";
       selectedArrow = arrow;
       return;
-    } else if (arrow.isOnLine(pos)) {
+    } else if (arrow.isOnLine(ctx, pos)) {
       draggingPoint = "body";
       selectedArrow = arrow;
       dragOffset = pos;
@@ -230,24 +329,6 @@ canvas.addEventListener("mouseup", () => {
   selectedArrow = null;
 });
 
-function getMousePos(e) {
-  const rect = canvas.getBoundingClientRect();
-  return {
-    x: e.clientX - rect.left,
-    y: e.clientY - rect.top,
-  };
-}
-
-function redraw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  ctx.drawImage(images[currentImageIndex], 0, 0, canvas.width, canvas.height);
-
-  for (let arrow of getCurrentArrows()) {
-    arrow.draw(ctx);
-  }
-}
-
 canvas.addEventListener("contextmenu", (e) => {
   e.preventDefault();
   const pos = getMousePos(e);
@@ -258,7 +339,7 @@ canvas.addEventListener("contextmenu", (e) => {
     if (
       arrow.isNear(pos, arrow.head) ||
       arrow.isNear(pos, arrow.tail) ||
-      arrow.isOnLine(pos)
+      arrow.isOnLine(ctx, pos)
     ) {
       if (arrow instanceof LabeledArrow) {
         arrow.destroy(); // remove the input
@@ -269,68 +350,3 @@ canvas.addEventListener("contextmenu", (e) => {
     }
   }
 });
-
-class LabeledArrow extends Arrow {
-  constructor(x1, y1, x2, y2, color) {
-    super(x1, y1, x2, y2, color);
-    this.input = this.createInput(x1, y1);
-  }
-
-  createInput(x, y) {
-    const input = document.createElement("input");
-    // add class name
-    input.className = " arrow_label";
-    input.type = "text";
-    input.placeholder = "Enter text";
-    input.style.display = "block";
-
-    document.body.appendChild(input);
-
-    return input;
-  }
-
-  hide() {
-    if (this.input) this.input.style.display = "none";
-  }
-
-  show() {
-    if (this.input) {
-      this.input.style.display = "block";
-      this.updateInputPosition(); // ← fix is here
-    }
-  }
-
-  updateInputPosition() {
-    const { x, y } = this.tail;
-    this.input.style.left = `${canvas.offsetLeft + x + 10}px`;
-    this.input.style.top = `${canvas.offsetTop + y - 20}px`;
-  }
-
-  draw(ctx) {
-    super.draw(ctx);
-    this.updateInputPosition();
-  }
-
-  destroy() {
-    if (this.input) {
-      this.input.remove();
-    }
-  }
-}
-
-function drawImage(index) {
-  for (let arrow of visibleLabeledArrows) {
-    arrow.hide();
-  }
-  visibleLabeledArrows = [];
-
-  currentImageIndex = index;
-  redraw();
-
-  for (let arrow of getCurrentArrows()) {
-    if (arrow instanceof LabeledArrow) {
-      arrow.show(); // will now auto-position
-      visibleLabeledArrows.push(arrow);
-    }
-  }
-}
