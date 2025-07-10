@@ -36,7 +36,6 @@ function drawImage(index) {
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 }
 
-// Slider change event
 slider.addEventListener("input", (e) => {
   const value = parseInt(e.target.value, 10);
   if (images[value - 1]) {
@@ -94,7 +93,6 @@ class Arrow {
     return ctx.isPointInStroke(this.path, point.x, point.y);
   }
 }
-
 class LabeledArrow extends Arrow {
   constructor(x1, y1, x2, y2, color) {
     super(x1, y1, x2, y2, color);
@@ -102,17 +100,20 @@ class LabeledArrow extends Arrow {
     this.input = this.createInput(x1, y1);
   }
 
-  createInput(x, y) {
+  createInput(x, y, value = "") {
     const input = document.createElement("input");
     input.className = "arrow_label";
     input.type = "text";
     input.placeholder = "Enter text";
+    input.value = value;
     input.style.display = "block";
 
     document.body.appendChild(input);
+    input.focus();
 
     input.addEventListener("blur", () => {
       const text = input.value.trim();
+
       if (text === "") {
         const arrows = getCurrentArrows();
         const index = arrows.indexOf(this);
@@ -133,6 +134,13 @@ class LabeledArrow extends Arrow {
     return input;
   }
 
+  enableEditing() {
+    if (this.input || !this.label) return;
+    this.input = this.createInput(this.tail.x, this.tail.y, this.label);
+    this.label = "";
+    redraw();
+  }
+
   hide() {
     if (this.input) this.input.style.display = "none";
   }
@@ -140,7 +148,7 @@ class LabeledArrow extends Arrow {
   show() {
     if (this.input) {
       this.input.style.display = "block";
-      this.updateInputPosition(); // ← fix is here
+      this.updateInputPosition();
     }
   }
 
@@ -159,8 +167,14 @@ class LabeledArrow extends Arrow {
 
       ctx.font = "14px Arial";
       ctx.fillStyle = this.color;
+      this._textBox = {
+        x: x + 10,
+        y: y - 20,
+        width: ctx.measureText(this.label).width,
+        height: 20,
+      };
 
-      ctx.fillText(this.label, x + 10, y - 10);
+      ctx.fillText(this.label, this._textBox.x, this._textBox.y + 15);
     } else {
       this.updateInputPosition();
     }
@@ -170,6 +184,15 @@ class LabeledArrow extends Arrow {
     if (this.input) {
       this.input.remove();
     }
+  }
+
+  isLabelClicked(pos) {
+    if (!this.label || !this._textBox) return false;
+
+    const { x, y, width, height } = this._textBox;
+    return (
+      pos.x >= x && pos.x <= x + width && pos.y >= y && pos.y <= y + height
+    );
   }
 }
 
@@ -336,6 +359,18 @@ canvas.addEventListener("mouseup", () => {
   selectedArrow = null;
 });
 
+canvas.addEventListener("dblclick", (e) => {
+  const pos = getMousePos(e);
+  const arrows = getCurrentArrows();
+
+  for (let arrow of arrows) {
+    if (arrow instanceof LabeledArrow && arrow.isLabelClicked(pos)) {
+      arrow.enableEditing();
+      break;
+    }
+  }
+});
+
 canvas.addEventListener("contextmenu", (e) => {
   e.preventDefault();
   const pos = getMousePos(e);
@@ -349,7 +384,7 @@ canvas.addEventListener("contextmenu", (e) => {
       arrow.isOnLine(ctx, pos)
     ) {
       if (arrow instanceof LabeledArrow) {
-        arrow.destroy(); // remove the input
+        arrow.destroy();
       }
       arrows.splice(i, 1);
       redraw();
