@@ -107,22 +107,29 @@ class LabeledArrow extends Arrow {
     input.className = "arrow_label";
     input.type = "text";
     input.placeholder = "Enter text";
-    input.style.position = "absolute";
-    input.style.left = `${canvas.offsetLeft + x + 10}px`;
-    input.style.top = `${canvas.offsetTop + y - 20}px`;
-    input.maxLength = 64;
     input.style.display = "block";
-    input.style.zIndex = 10;
-    input.style.font = "14px Arial";
-
-    input.addEventListener("blur", () => {
-      this.label = input.value;
-      input.remove();
-      this.input = null;
-      redraw();
-    });
 
     document.body.appendChild(input);
+
+    input.addEventListener("blur", () => {
+      const text = input.value.trim();
+      if (text === "") {
+        const arrows = getCurrentArrows();
+        const index = arrows.indexOf(this);
+        if (index !== -1) {
+          arrows.splice(index, 1);
+        }
+
+        this.destroy();
+        redraw();
+      } else {
+        this.label = text;
+        this.input.remove();
+        this.input = null;
+        redraw();
+      }
+    });
+
     return input;
   }
 
