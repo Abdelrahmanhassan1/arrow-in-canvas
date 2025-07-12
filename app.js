@@ -108,8 +108,19 @@ class LabeledArrow extends Arrow {
     input.value = value;
     input.style.display = "block";
 
+    let originalValue = value;
+
     document.body.appendChild(input);
     input.focus();
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        input.blur();
+      } else if (e.key === "Escape") {
+        input.value = originalValue;
+        input.blur();
+      }
+    });
 
     input.addEventListener("blur", () => {
       const text = input.value.trim();
@@ -168,7 +179,7 @@ class LabeledArrow extends Arrow {
       ctx.font = "14px Arial";
       ctx.fillStyle = this.color;
       this._textBox = {
-        x: x + 10,
+        x: x - ctx.measureText(this.label).width / 2,
         y: y - 20,
         width: ctx.measureText(this.label).width,
         height: 20,
@@ -288,8 +299,33 @@ canvas.addEventListener("click", (e) => {
 
   let arrow;
   const offset = 100 / Math.sqrt(2);
-  const tailX = pos.x - offset;
-  const tailY = pos.y - offset;
+  let tailX, tailY, headX, headY;
+
+  if (pos.x < canvas.width / 2 && pos.y < canvas.height / 2) {
+    // Top-left quadrant
+    tailX = pos.x - offset;
+    tailY = pos.y - offset;
+    headX = pos.x;
+    headY = pos.y;
+  } else if (pos.x >= canvas.width / 2 && pos.y < canvas.height / 2) {
+    // Top-right quadrant
+    tailX = pos.x + offset;
+    tailY = pos.y - offset;
+    headX = pos.x;
+    headY = pos.y;
+  } else if (pos.x < canvas.width / 2 && pos.y >= canvas.height / 2) {
+    // Bottom-left quadrant
+    tailX = pos.x - offset;
+    tailY = pos.y + offset;
+    headX = pos.x;
+    headY = pos.y;
+  } else {
+    // Bottom-right quadrant
+    tailX = pos.x + offset;
+    tailY = pos.y + offset;
+    headX = pos.x;
+    headY = pos.y;
+  }
 
   if (shape === "arrow") {
     arrow = new Arrow(tailX, tailY, pos.x, pos.y, color);
